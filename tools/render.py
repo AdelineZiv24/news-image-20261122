@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 """Render frontpage.html to entry.png with headless Chromium.
 
-Window 1024x1024, device scale factor 1, no sandbox (VM has no user
-namespaces for the sandbox). Finds the Chromium binary from the
-Playwright cache first, then falls back to any chromium on PATH.
+Window 1024x1024, device scale factor 1, no sandbox (this VM has no user
+namespaces for the Chromium sandbox). The Chromium binary is looked up in
+the Playwright cache first, then on PATH.
 
 Usage:
-    python3 tools/render.py            # render entry.png at 1024x1024
+    python3 tools/render.py            # write entry.png at 1024x1024
     python3 tools/render.py --measure  # render a tall copy and print the
-                                       # natural content height (last row
-                                       # that is not the body background)
+                                       # natural content height (the last
+                                       # row that is not the page frame's
+                                       # body background colour)
 """
 import argparse
 import hashlib
-import os
 import shutil
 import subprocess
 import sys
@@ -22,6 +22,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 HTML = ROOT / "frontpage.html"
 PNG = ROOT / "entry.png"
+BODY_BG = (221, 213, 191)  # body background #ddd5bf in frontpage.html
 
 CANDIDATES = [
     Path.home() / ".cache/ms-playwright/chromium-1255/chrome-linux64/chrome",
@@ -59,24 +60,23 @@ def shot(chrome, html_path, png_path, width, height):
 
 def measure(chrome):
     from PIL import Image
-    tall = Path("/tmp/news22_tall.html")
+    tall = Path("/tmp/news22_v2_tall.html")
     text = HTML.read_text()
     text = text.replace("height:1024px;", "height:auto;", 1)
     tall.write_text(text)
-    out = Path("/tmp/news22_tall.png")
-    shot(chrome, tall, out, 1024, 2200)
+    out = Path("/tmp/news22_v2_tall.png")
+    shot(chrome, tall, out, 1024, 2400)
     im = Image.open(out).convert("RGB")
     w, h = im.size
-    bg = (207, 200, 184)  # body background #cfc8b8
     px = im.load()
     last = 0
     for y in range(h - 1, -1, -1):
-        row_bg = all(px[x, y] == bg for x in (0, 100, 512, 900, 1023))
-        if not row_bg:
+        if any(px[x, y] != BODY_BG for x in (0, 100, 512, 900, 1023)):
             last = y + 1
             break
+    state = f"OVER by {last - 1024}" if last > 1024 else f"fits, slack {1024 - last}px"
     print(f"tall render {w}x{h}; natural content height = {last}px "
-          f"(page budget 1024px; {'OVER by ' + str(last - 1024) if last > 1024 else 'fits, slack ' + str(1024 - last)}px)")
+          f"(page budget 1024px; {state})")
     return last
 
 
